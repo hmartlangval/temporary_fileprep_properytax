@@ -1,7 +1,11 @@
 I need to search for property using one of given Address or Parcel ID, use parcel ID if available.
 
 Data below has a structured mapping of URL to navigate and the steps instruction for different counties. Decide the best instruction and return me structured JSON output.
+Return the instructions only if the county is in the supported county lists
 ${userintent}
+
+Supported County List:
+ [baker]
 
 
 Counties: [alachua, bay]
@@ -10,9 +14,10 @@ Counties: [alachua, bay]
 Counties: [pasco]
     None ## website unavailable
 
-Counties: [baker]: 
+Counties: [baker]
 URL: http://www.bakerpa.com/search.html
 search by parcel id: http://www.bakerpa.com/propertydetails.php?parcel=<parcel id with no hyphens and not space>
+    
     Parcel search instructions:
         1. Save page
         
@@ -21,20 +26,20 @@ search by parcel id: http://www.bakerpa.com/propertydetails.php?parcel=<parcel i
         2. Type Street # and/or Street Name in #streetnum. Enter
         3. click on 'a[href*="propertydetails.php?parcel"]'
 
-
-Counties: [bradford]: **need revision**
+Counties: [bradford]
 URL: https://www.bradfordappraiser.com/gis/
+
     Parcel search instructions:
-        1. If exists #button1, click on #button1
+        1. If exists input type button value="I agree, please continue", click on that button
         2. Type parcel Id in #PIN. use parcel ID format #####-#-#####. Enter.
         3. Save page
         
     Address search instructions:
-        1. If there is a dialog with text "** NEVER USE THIS INFORMATION IN ANY OFFICIAL CAPACITY **", click on #button1
+        1. If there element of div that contains text "** NEVER USE THIS INFORMATION IN ANY OFFICIAL CAPACITY **", click on #button1
         2. Type *HouseNumber  StreetName in input[name="StreetName"]. Enter
         3. click on 'a[href*="propertydetails.php?parcel"]'
 
-Counties: [pinellas]: 
+Counties: [pinellas]
 URL: https://www.pcpao.gov/ #pinellas.html
     Parcel search instructions:
         1. Click #dogradio3.
@@ -47,32 +52,62 @@ URL: https://www.pcpao.gov/ #pinellas.html
 
 Counties: [polk]
 URL: 
-search by address: https://www.polkpa.org/CamaDisplay.aspx?OutputMode=Input&searchType=RealEstate&page=FindByAddress&cookie_test=true 
-searcy by parcel id: https://www.polkpa.org/CamaDisplay.aspx?OutputMode=Input&searchType=RealEstate&page=FindByID
+    search by address: https://www.polkpa.org/CamaDisplay.aspx?OutputMode=Input&searchType=RealEstate&page=FindByAddress&cookie_test=true 
+    searcy by parcel id choice 1: https://www.polkpa.org/CamaDisplay.aspx?OutputMode=Input&searchType=RealEstate&page=FindByID
+    search by parcel id choice 2: https://www.polkpa.org/CamaDisplay.aspx?OutputMode=Display&SearchType=RealEstate&ParcelID=<parcel id with all spaces and hyphens removed. just numbers>
 
-    Parcel search instructions:
+    Parcel search instructions choice 1:
         1. Type parcel id in #parcelID. Enter.
+        2. save
+    
+    Parcel search instructions choice 2:
+        1. save
         
     Address search instructions:
         1. Type house # and street name in #address. Enter
         2. Click on '.parcelid a[href*="ParcelID"]' # query params includes add and parcelid
 
 
-Instructions:
+Counties: [jacksonville]
+URL: https://paopropertysearch.coj.net/Basic/Search.aspx
+
+    Parcel search instructions:
+        
+        
+    Address search instructions:
+        1. Type street # only on input title="Enter the street number"
+        2. Type street name strictly without direction on input title="Enter the street name."
+        3. Select street direction on aria label "Street Direction" dropdown
+
+
+**STRICT Instructions**:
 - If you do not find matching counties, provide blank JSON object.
 - If instruction is to press Enter, set action "enter"
 - If instruction is to save or print the page, set action "print pdf"
+- If you do not find match for county from given address, do not give any instructions. Use instructions that matches counties and address only.
+- Return empty instructions for counties that are no part of the supported list. error: "County Not Supported"
 
-Example JSON output:
+Example JSON output for supported counties:
 {
+    "error": "County Not Supported", # only if not in the supported list
     "parcelId": parcel id,
     "state": state,
     "county": county,
     "url": url,
     "instructions": [
+        { "selector": "#streetdirection", action: "select", value: "W" },
         { "selector": "#dogradio3", action: "click" },
         { action: "wait", value: 2 }, # set value to 2 (seconds) if not specified
         { "selector": "#txtKeyword", "value": "255 Capri Cir N 23", action: "type" }, # *StriCT RULE* if instruction says for street name, only fill in the street name, do not include state, county, suite number, house number etc.
         { "selector": "button:has-text('Ok')", action: "click", check_selector: "span:has-text('Website Disclaimer'), div:has-text('Website Disclaimer')" }, # when the instruction is conditional on presence of selector
     ]
+}
+
+Example JSON output for NOT SUPPORTED counties:
+{
+    "error": "County Not Supported"
+    "parcelId": parcel id,
+    "state": state,
+    "county": county,
+    "instructions": []
 }

@@ -2,11 +2,16 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const Configuration = require('./configuration');
+const { waitUntilElementIsFoundWithFrameLocator } = require('./utils/pw.util');
 
 class PropertyTaxHandler {
 
     constructor() {
         this.config = new Configuration();
+    }
+
+    async threadAwait(seconds){
+        await new Promise(resolve => setTimeout(resolve, (seconds ?? 2) * 1000));
     }
 
     async customHandler(parcelId, address){
@@ -17,16 +22,7 @@ class PropertyTaxHandler {
     async handleRequest(message){
     
         const user_intent = message.content;
-    
-        const browser = await chromium.launch({
-            headless: false, // Set to true for production use
-            slowMo: 100 // Slows down Playwright operations for demo purposes
-        });
-        const context = await browser.newContext();
-        const page = await context.newPage();
-    
-        let is_completed = false;
-    
+
         const promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt.txt'), 'utf8');
         const populatedPrompt = promptTemplate.replace('${userintent}', user_intent);
     
@@ -51,8 +47,24 @@ class PropertyTaxHandler {
     
         const logFilePath = path.join(this.config.downloadsPath, 'executionlog.log');
         const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
-    
+        
         logStream.write(`${data.state} ${data.county} ${data.parcelId} - `);
+        
+        if(data.error){
+            logStream.write(` - Error: ${data.error}\n`);
+            logStream.end();
+            return;
+        }
+
+
+        const browser = await chromium.launch({
+            headless: false, // Set to true for production use
+            // slowMo: 100 // Slows down Playwright operations for demo purposes
+        });
+        const context = await browser.newContext();
+        const page = await context.newPage();
+    
+        let is_completed = false;
     
         const __url = data.url.startsWith('http') ? data.url : `file://${path.join(__dirname, 'parcel', 'example', data.url)}`;
         await page.goto(__url, { timeout: 300000 });
@@ -65,7 +77,8 @@ class PropertyTaxHandler {
             // if optional fails, we resume and move on to the next instruction
             if ('check_selector' in instruction) {
                 try {
-                    await page.waitForSelector(instruction.check_selector, { timeout: 15000 });
+                    await waitUntilElementIsFoundWithFrameLocator(page, instruction.check_selector, 10000);
+                    // await page.waitForSelector(instruction.check_selector, { timeout: 15000 });
                     // do nothing here as conditions satisfies, loop will continue to execute the action
     
                 } catch (error) {
@@ -81,26 +94,33 @@ class PropertyTaxHandler {
     
             switch(instruction.action){
                 case "type":
-                    await page.waitForSelector(instruction.selector);
-                    await page.locator(instruction.selector).fill(instruction.value);
+                    const [el, loc] = await waitUntilElementIsFoundWithFrameLocatorementIsFound(page, instruction.selector);
+                    await loc.fill(instruction.value);
                     // await page.fill(instruction.selector, instruction.value);
                     await page.waitForTimeout(100);
                     break;
                 case "click":
-                    await page.waitForSelector(instruction.selector);
-                    await page.locator(instruction.selector).click();
+                    const [el2, loc2] = await waitUntilElementIsFoundWithFrameLocatorementIsFound(page, instruction.selector);
+                    // await page.locator(instruction.selector).click();
+                    await loc2.click();
+                    await page.waitForTimeout(100);
+                    break;
+                case "select":
+                    const [el3, loc3] = await waitUntilElementIsFoundWithFrameLocatorementIsFound(page, instruction.selector);
+                    await loc3.selectOption(instruction.value);
                     await page.waitForTimeout(100);
                     break;
                 case "wait":
-                    await page.waitForTimeout((instruction.value ?? 2) * 1000);
+                    // await page.waitForTimeout((instruction.value ?? 2) * 1000);
+                    await this.threadAwait(instruction.value ?? 2);
                     break;
                 case "enter":
                     await page.keyboard.press('Enter');
-                    await page.waitForTimeout(2000);
+                    await this.threadAwait(2);
                     break;
                 case "print pdf":
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                    await page.waitForTimeout(1000);
+                    await this.threadAwait(1);
                     await page.pdf({ path: path.join(this.config.downloadsPath, `account_${data.parcelId ?? "property"}_${timestamp}.pdf`) });
                     is_completed = true;
                     break;
